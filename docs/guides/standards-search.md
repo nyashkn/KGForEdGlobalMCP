@@ -97,6 +97,14 @@ The server normalizes lexical text deterministically, but it does not perform:
 Consequently, `fraction` and `fractions` are different lexical forms, and `story
 structure` is not the same exact phrase as `structure of a story`.
 
+A framework profile can opt in to English plural folding with
+`languagePolicy.foldLexicalPlurals: true`. It is off by default and no shipped profile
+sets it. When on, indexed descriptions and queries fold plural endings the same way
+(`fractions` to `fraction`, `studies` to `study`, `axes` to `axis`, `halves` to `half`),
+`matchedTerms` show the folded form, and the package's `lexicalNormalizerVersion` and
+index hash change. Words such as `times` and `news` are never folded. Other word endings
+are still not stemmed.
+
 !!! warning "Zero matches do not establish curriculum absence"
     A zero-result page means that the supplied expression did not match under the
     selected package, filters, mode, match policy, and bounds. It does not prove that no

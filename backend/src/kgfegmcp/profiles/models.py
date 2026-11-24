@@ -293,6 +293,8 @@ class LanguagePolicy(FrozenSchema):
     """Define language handling without translating or replacing source wording."""
 
     allow_bilingual_pairing: bool = False
+    # Opt in to English plural folding in lexical search keys (`search.normalizers`).
+    fold_lexical_plurals: bool = False
     languages: tuple[LanguageTag, ...] = Field(min_length=1)
     notes: tuple[str, ...] = ()
     preserve_source_terminology: bool = True

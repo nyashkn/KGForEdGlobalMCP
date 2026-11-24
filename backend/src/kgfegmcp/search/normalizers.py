@@ -6,7 +6,9 @@ keys only; it never modifies the exact source values retained in graph packages 
 returned in search evidence.
 
 Lexical normalization applies Unicode NFKC normalization and case folding, then splits
-text into ordered runs of Unicode letters, marks, and numbers. Facet normalization
+text into ordered runs of Unicode letters, marks, and numbers. A profile may opt in to
+English plural folding (see `fold_plural`), so `fraction` and `fractions` share one key;
+it is off by default. Facet normalization
 applies Unicode NFKC normalization, case folding, and whitespace collapsing while
 preserving meaningful punctuation.
 
@@ -35,6 +37,9 @@ from kgfegmcp.profiles.models import CodeSearchPolicy
 CODE_NORMALIZER_VERSION: Final[str] = "profile_code_nfkc_v1"
 FACET_NORMALIZER_VERSION: Final[str] = "facet_nfkc_casefold_whitespace_v1"
 LEXICAL_NORMALIZER_VERSION: Final[str] = "lexical_nfkc_casefold_tokens_v1"
+LEXICAL_PLURAL_FOLD_NORMALIZER_VERSION: Final[str] = (
+    "lexical_nfkc_casefold_plural_fold_v2"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,13 +344,37 @@ def normalize_facet_value(value: str) -> str:
     return " ".join(normalized.split())
 
 
-def normalize_lexical_text(value: str) -> tuple[str, ...]:
+def lexical_normalizer_version(*, fold_plurals: bool) -> str:
+    """Return the lexical normalizer version for one plural-folding setting.
+
+    Parameters
+    ----------
+    fold_plurals
+        Whether the package profile opts in to English plural folding.
+
+    Returns
+    -------
+    str
+        Version identifier recorded in index metadata.
+    """
+
+    if fold_plurals:
+        return LEXICAL_PLURAL_FOLD_NORMALIZER_VERSION
+
+    return LEXICAL_NORMALIZER_VERSION
+
+
+def normalize_lexical_text(
+    value: str, *, fold_plurals: bool = False
+) -> tuple[str, ...]:
     """Normalize text into deterministic Unicode letter-number-mark tokens.
 
     Parameters
     ----------
     value
         Source description or lexical query.
+    fold_plurals
+        Whether to fold English plural endings (see `fold_plural`).
 
     Returns
     -------
@@ -371,7 +400,71 @@ def normalize_lexical_text(value: str) -> tuple[str, ...]:
     if token_characters:
         tokens.append("".join(token_characters))
 
+    if fold_plurals:
+        return tuple(fold_plural(token) for token in tokens)
+
     return tuple(tokens)
+
+
+def fold_plural(token: str) -> str:
+    """Fold one English plural ending so singular and plural share a lookup key.
+
+    The fold runs on indexed descriptions and queries alike, so it only matters when two
+    different words share a key. Only lowercase ASCII alphabetic tokens longer than three
+    characters change; numbers and other scripts do not. Words in `_UNFOLDED` keep their
+    form (`times` is not `time`), `_IRREGULAR` maps listed plurals to their singular,
+    and `-ss`, `-us`, `-is` endings are left alone.
+
+    Parameters
+    ----------
+    token
+        One casefolded lexical token.
+
+    Returns
+    -------
+    str
+        The token with a plural ending removed, or the token itself.
+    """
+
+    if len(token) <= 3 or not (token.isascii() and token.isalpha()):
+        return token
+
+    if token in _UNFOLDED:
+        return token
+
+    if token in _IRREGULAR:
+        return _IRREGULAR[token]
+
+    if token.endswith("ies") and len(token) > 4:
+        return token[:-3] + "y"
+
+    if token.endswith(("sses", "shes", "xes")) or (
+        token.endswith("ches") and token not in _CHE_WORDS
+    ):
+        return token[:-2]
+
+    if token.endswith("s") and not token.endswith(("ss", "us", "is")):
+        return token[:-1]
+
+    return token
+
+
+# Plurals whose singular differs by more than a final "s" or "es".
+_IRREGULAR: Final[dict[str, str]] = {
+    "axes": "axis",
+    "children": "child",
+    "feet": "foot",
+    "halves": "half",
+    "indices": "index",
+    "matrices": "matrix",
+    "vertices": "vertex",
+}
+# Words ending in "s" that are not plurals of the shorter word ("times" is not "time").
+_UNFOLDED: Final[frozenset[str]] = frozenset({"news", "series", "species", "times"})
+# Plurals ending "-ches" whose singular ends "-che", so only the "s" drops.
+_CHE_WORDS: Final[frozenset[str]] = frozenset(
+    {"aches", "caches", "headaches", "moustaches", "niches"}
+)
 
 
 def normalize_nfkc(value: str) -> str:

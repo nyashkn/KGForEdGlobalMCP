@@ -110,7 +110,7 @@ from kgfegmcp.search.models import (
 from kgfegmcp.search.normalizers import (
     CODE_NORMALIZER_VERSION,
     FACET_NORMALIZER_VERSION,
-    LEXICAL_NORMALIZER_VERSION,
+    lexical_normalizer_version,
     normalize_facet_value,
     normalize_lexical_text,
 )
@@ -1514,6 +1514,9 @@ def _build_package_metadata(
 
     loaded_package = catalog_runtime.loaded_package
     profile = loaded_package.profile
+    normalizer_version = lexical_normalizer_version(
+        fold_plurals=lexical_index.fold_plurals
+    )
     payload = {
         "capabilities": loaded_package.manifest.capabilities.model_dump(
             by_alias=True, mode="json"
@@ -1592,7 +1595,7 @@ def _build_package_metadata(
             }
             for document in lexical_index.documents_by_id.values()
         ),
-        "lexical_normalizer_version": LEXICAL_NORMALIZER_VERSION,
+        "lexical_normalizer_version": normalizer_version,
         "package_identity": code_index.package_identity.model_dump(
             by_alias=True, mode="json"
         ),
@@ -1607,7 +1610,7 @@ def _build_package_metadata(
         index_sha256=index_sha256,
         learning_component_document_count=component_lexical_index.document_count,
         lexical_document_count=lexical_index.document_count,
-        lexical_normalizer_version=LEXICAL_NORMALIZER_VERSION,
+        lexical_normalizer_version=normalizer_version,
         lexical_posting_count=lexical_index.posting_count,
         lexical_unique_token_count=lexical_index.unique_token_count,
         normalized_code_key_count=code_index.normalized_code_key_count,

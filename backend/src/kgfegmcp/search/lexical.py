@@ -75,6 +75,7 @@ class LexicalIndex(Generic[LexicalNodeT]):
     package_identity: GraphPackageIdentity
     posting_count: int
     postings_by_token: Mapping[str, tuple[LexicalDocument[LexicalNodeT], ...]]
+    fold_plurals: bool = False
 
     @classmethod
     def from_runtime(cls, runtime: CatalogPackageRuntime) -> LexicalIndex[StandardNode]:
@@ -92,6 +93,7 @@ class LexicalIndex(Generic[LexicalNodeT]):
         """
 
         return _build_lexical_index(
+            fold_plurals=runtime.loaded_package.profile.language_policy.fold_lexical_plurals,
             nodes=runtime.loaded_package.item_nodes,
             package_identity=runtime.catalog_package.package_identity,
         )
@@ -114,6 +116,7 @@ class LexicalIndex(Generic[LexicalNodeT]):
         """
 
         return _build_lexical_index(
+            fold_plurals=runtime.loaded_package.profile.language_policy.fold_lexical_plurals,
             nodes=runtime.loaded_package.learning_component_nodes,
             package_identity=runtime.catalog_package.package_identity,
         )
@@ -160,7 +163,7 @@ class LexicalIndex(Generic[LexicalNodeT]):
             Candidates in exact source tuple order before service-level ranking.
         """
 
-        query_tokens = normalize_lexical_text(query)
+        query_tokens = normalize_lexical_text(query, fold_plurals=self.fold_plurals)
 
         if match.match_mode is TextMatchMode.EXACT_PHRASE:
             return self._phrase_candidates(query_tokens)
@@ -355,12 +358,17 @@ def _contains_contiguous_tokens(
 
 
 def _build_lexical_index(
-    *, nodes: tuple[LexicalNodeT, ...], package_identity: GraphPackageIdentity
+    *,
+    fold_plurals: bool,
+    nodes: tuple[LexicalNodeT, ...],
+    package_identity: GraphPackageIdentity,
 ) -> LexicalIndex[LexicalNodeT]:
     """Build one immutable lexical index over the supplied source nodes.
 
     Parameters
     ----------
+    fold_plurals
+        Whether the package profile opts in to English plural folding.
     nodes
         Exact source nodes retained by the index.
     package_identity
@@ -380,7 +388,8 @@ def _build_lexical_index(
             continue
 
         document = LexicalDocument(
-            node=node, tokens=normalize_lexical_text(node.description)
+            node=node,
+            tokens=normalize_lexical_text(node.description, fold_plurals=fold_plurals),
         )
         documents_by_id[node.node_id] = document
 
@@ -396,6 +405,7 @@ def _build_lexical_index(
 
     return LexicalIndex(
         documents_by_id=MappingProxyType(documents_by_id),
+        fold_plurals=fold_plurals,
         package_identity=package_identity,
         posting_count=sum(len(documents) for documents in postings_by_token.values()),
         postings_by_token=MappingProxyType(postings_by_token),
